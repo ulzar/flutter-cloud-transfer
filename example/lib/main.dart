@@ -29,15 +29,56 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Startup Name Generator',
-      theme: ThemeData(
-        primaryColor: Colors.amber,
-      ),
-      home: RandomWords(),
+      // theme: ThemeData(
+      //   primaryColor: Colors.amber,
+      // ),
+      home: MyHomePage(title: 'Flutter Demo Home Page'),
     );
   }
 }
 
-class RandomWordsState extends State<RandomWords> {
+
+class MyHomePage extends StatefulWidget {
+  MyHomePage({Key key, this.title}) : super(key: key);
+  final String title;
+
+  @override
+  _MyHomePageState createState() => _MyHomePageState();
+}
+
+class _MyHomePageState extends State<MyHomePage> {
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+        children: <Widget>[
+          Expanded(
+              child: LocalExplorer(),
+          ),
+          Container(
+              width: 40,
+              color: Colors.grey
+          ),
+          Expanded(
+              child: Container(
+                color: Colors.blueGrey,
+              )
+          ),
+        ]
+    );
+  }
+}
+
+
+// **************************************************************************************************
+// **************************************************************************************************
+// **************************************************************************************************
+class RemoteExplorer extends StatefulWidget {
+  @override
+  RemoteExplorerState createState() => RemoteExplorerState();
+}
+
+class RemoteExplorerState extends State<RemoteExplorer> {
   final List<WordPair> _suggestions = <WordPair>[];
   final Set<WordPair> _saved = Set<WordPair>();   // Add this line.
   final TextStyle _biggerFont = TextStyle(fontSize: 18.0);
@@ -45,48 +86,46 @@ class RandomWordsState extends State<RandomWords> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Startup Name Generator'),
-        actions: <Widget>[
-          IconButton(icon: Icon(Icons.list), onPressed: _pushSaved),
-        ],
+        title: Text('Local Folder Explorer'),
+        // actions: <Widget>[
+        //   IconButton(icon: Icon(Icons.list), onPressed: _pushSaved),
+        // ],
       ),
-      body: _buildSuggestions(),
+      body: new LayoutBuilder(builder: (layoutContext, constraint) {
+        return _buildSuggestions(layoutContext, constraint);
+      }),
+    );
+  }
+}
+
+// **************************************************************************************************
+// **************************************************************************************************
+// **************************************************************************************************
+class LocalExplorer extends StatefulWidget {
+  @override
+  LocalExplorerState createState() => LocalExplorerState();
+}
+
+class LocalExplorerState extends State<LocalExplorer> {
+  final List<WordPair> _suggestions = <WordPair>[];
+  final Set<WordPair> _saved = Set<WordPair>();   // Add this line.
+  final TextStyle _biggerFont = TextStyle(fontSize: 18.0);
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Local Folder Explorer'),
+        // actions: <Widget>[
+        //   IconButton(icon: Icon(Icons.list), onPressed: _pushSaved),
+        // ],
+      ),
+      body: new LayoutBuilder(builder: (layoutContext, constraint) {
+        return _buildSuggestions(layoutContext, constraint);
+      }),
     );
   }
 
-  void _pushSaved() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (BuildContext context) {
-          final Iterable<ListTile> tiles = _saved.map(
-            (WordPair pair) {
-              return ListTile(
-                title: Text(
-                  pair.asPascalCase,
-                  style: _biggerFont,
-                )
-              );
-            }
-          );
-
-          final List<Widget> divided = ListTile
-          .divideTiles(
-            context: context,
-            tiles: tiles,
-          ).toList();
-
-          return Scaffold(
-            appBar: AppBar(
-              title: Text('Saved Suggestions')
-            ),
-            body: ListView(children: divided)
-          );
-        }
-      )
-    );
-  }
-
-  Widget _buildSuggestions() {
+  Widget _buildSuggestions(layoutContext, constraint) {
     return ListView.builder(
       padding: const EdgeInsets.all(16.0),
       itemBuilder: /*1*/ (context, i) {
@@ -96,35 +135,153 @@ class RandomWordsState extends State<RandomWords> {
         if (index >= _suggestions.length) {
           _suggestions.addAll(generateWordPairs().take(10)); /*4*/
         }
-        return _buildRow(_suggestions[index]);
+        return _buildRow(_suggestions[index], i, layoutContext, constraint);
     });
   }
 
-  Widget _buildRow(WordPair pair) {
+  Widget _buildRow(WordPair pair, int index, layoutContext, constraint) {
     final bool alreadySaved = _saved.contains(pair);
-    return ListTile(
-      title: Text(
-        pair.asPascalCase,
-        style: _biggerFont,
+    var listTileWord = ListTile(
+        title: Text(
+          pair.asPascalCase,
+          style: _biggerFont,
+        ),
+        trailing: Icon(   // Add the lines from here... 
+          alreadySaved ? Icons.favorite : Icons.favorite_border,
+          color: alreadySaved ? Colors.red : null,
+        ),
+        onTap: () {
+          setState(() {
+            if(alreadySaved) {
+              _saved.remove(pair);
+            } else {
+              _saved.add(pair);
+            }
+          });
+        },
+      );
+    return LongPressDraggable(
+      key: new ObjectKey(index),
+      data: pair.asPascalCase,
+      child: new DragTarget<String>(
+        builder: (BuildContext context, List<String> data, List<dynamic> rejects) {
+          return new Card(
+            child: new Column(
+              children: <Widget>[
+                listTileWord,
+              ],
+            ),
+          );
+        }
       ),
-      trailing: Icon(   // Add the lines from here... 
-        alreadySaved ? Icons.favorite : Icons.favorite_border,
-        color: alreadySaved ? Colors.red : null,
-      ),
-      onTap: () {
-        setState(() {
-          if(alreadySaved) {
-            _saved.remove(pair);
-          } else {
-            _saved.add(pair);
-          }
-        });
+      onDragStarted: () {
+        Scaffold.of(layoutContext).showSnackBar(new SnackBar (
+          content: new Text("Drag the row onto another row to change places"),
+        ));
       },
+      feedback:  new SizedBox(
+        width: constraint.maxWidth,
+        child: new Card (
+          child: new Column(
+            children: <Widget>[
+              listTileWord
+            ],
+          ),
+        ),
+      ),
+      childWhenDragging: Container(),
     );
   }
 }
 
-class RandomWords extends StatefulWidget {
-  @override
-  RandomWordsState createState() => RandomWordsState();
-}
+// class RandomWordsState extends State<RandomWords> {
+//   final List<WordPair> _suggestions = <WordPair>[];
+//   final Set<WordPair> _saved = Set<WordPair>();   // Add this line.
+//   final TextStyle _biggerFont = TextStyle(fontSize: 18.0);
+//   @override
+//   Widget build(BuildContext context) {
+//     return Scaffold(
+//       appBar: AppBar(
+//         title: Text('Startup Name Generator'),
+//         actions: <Widget>[
+//           IconButton(icon: Icon(Icons.list), onPressed: _pushSaved),
+//         ],
+//       ),
+//       body: _buildSuggestions(),
+//     );
+//   }
+
+//   void _pushSaved() {
+//     Navigator.of(context).push(
+//       MaterialPageRoute<void>(
+//         builder: (BuildContext context) {
+//           final Iterable<ListTile> tiles = _saved.map(
+//             (WordPair pair) {
+//               return ListTile(
+//                 title: Text(
+//                   pair.asPascalCase,
+//                   style: _biggerFont,
+//                 )
+//               );
+//             }
+//           );
+
+//           final List<Widget> divided = ListTile
+//           .divideTiles(
+//             context: context,
+//             tiles: tiles,
+//           ).toList();
+
+//           return Scaffold(
+//             appBar: AppBar(
+//               title: Text('Saved Suggestions')
+//             ),
+//             body: ListView(children: divided)
+//           );
+//         }
+//       )
+//     );
+//   }
+
+//   Widget _buildSuggestions() {
+//     return ListView.builder(
+//       padding: const EdgeInsets.all(16.0),
+//       itemBuilder: /*1*/ (context, i) {
+//         if (i.isOdd) return Divider(); /*2*/
+
+//         final index = i ~/ 2; /*3*/
+//         if (index >= _suggestions.length) {
+//           _suggestions.addAll(generateWordPairs().take(10)); /*4*/
+//         }
+//         return _buildRow(_suggestions[index]);
+//     });
+//   }
+
+//   Widget _buildRow(WordPair pair) {
+//     final bool alreadySaved = _saved.contains(pair);
+//     return ListTile(
+//       title: Text(
+//         pair.asPascalCase,
+//         style: _biggerFont,
+//       ),
+//       trailing: Icon(   // Add the lines from here... 
+//         alreadySaved ? Icons.favorite : Icons.favorite_border,
+//         color: alreadySaved ? Colors.red : null,
+//       ),
+//       onTap: () {
+//         setState(() {
+//           if(alreadySaved) {
+//             _saved.remove(pair);
+//           } else {
+//             _saved.add(pair);
+//           }
+//         });
+//       },
+//     );
+//   }
+// }
+
+// class RandomWords extends StatefulWidget {
+//   @override
+//   RandomWordsState createState() => RandomWordsState();
+// }
