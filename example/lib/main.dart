@@ -60,9 +60,7 @@ class _MyHomePageState extends State<MyHomePage> {
               color: Colors.grey
           ),
           Expanded(
-              child: Container(
-                color: Colors.blueGrey,
-              )
+              child: RemoteExplorer()
           ),
         ]
     );
@@ -80,20 +78,94 @@ class RemoteExplorer extends StatefulWidget {
 
 class RemoteExplorerState extends State<RemoteExplorer> {
   final List<WordPair> _suggestions = <WordPair>[];
-  final Set<WordPair> _saved = Set<WordPair>();   // Add this line.
+  // final Set<WordPair> _saved = Set<WordPair>();   // Add this line.
   final TextStyle _biggerFont = TextStyle(fontSize: 18.0);
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Local Folder Explorer'),
+        title: Text('Remote Folder Explorer'),
         // actions: <Widget>[
         //   IconButton(icon: Icon(Icons.list), onPressed: _pushSaved),
         // ],
       ),
       body: new LayoutBuilder(builder: (layoutContext, constraint) {
-        return _buildSuggestions(layoutContext, constraint);
+        return ListView.builder(
+          padding: const EdgeInsets.all(16.0),
+          itemBuilder: /*1*/ (context, i) {
+            
+            if (i.isOdd) return Divider(); /*2*/
+
+            final index = i ~/ 2; /*3*/
+            if (index >= _suggestions.length) {
+              _suggestions.addAll(generateWordPairs().take(10)); /*4*/
+            }
+            return _buildRow(_suggestions[index], i, layoutContext, constraint);
+          }
+        );
       }),
+    );
+  }
+
+  Widget _buildRow(WordPair pair, int index, layoutContext, constraint) {
+    // final bool alreadySaved = _saved.contains(pair);
+    var listTileWord = ListTile(
+        title: Text(
+          pair.asPascalCase,
+          style: _biggerFont,
+        ),
+        // trailing: Icon(   // Add the lines from here... 
+        //   alreadySaved ? Icons.favorite : Icons.favorite_border,
+        //   color: alreadySaved ? Colors.red : null,
+        // ),
+        // onTap: () {
+        //   setState(() {
+        //     if(alreadySaved) {
+        //       _saved.remove(pair);
+        //     } else {
+        //       _saved.add(pair);
+        //     }
+        //   });
+        // },
+      );
+    return LongPressDraggable(
+      key: new ObjectKey(index),
+      data: pair.asPascalCase,
+      child: new DragTarget<String>(
+        builder: (BuildContext context, List<String> data, List<dynamic> rejects) {
+          return new Card(
+            child: new Column(
+              children: <Widget>[
+                listTileWord,
+              ],
+            ),
+          );
+        },
+        onWillAccept: (data) {
+          return true;
+        },
+        onAccept: (data) {
+          Scaffold.of(layoutContext).showSnackBar(new SnackBar (
+            content: new Text(pair.asPascalCase + " Received folder " + data),
+          ));
+        },
+      ),
+      onDragStarted: () {
+        Scaffold.of(layoutContext).showSnackBar(new SnackBar (
+          content: new Text("Drag the row onto another row to change places"),
+        ));
+      },
+      feedback:  new SizedBox(
+        width: constraint.maxWidth,
+        child: new Card (
+          child: new Column(
+            children: <Widget>[
+              listTileWord
+            ],
+          ),
+        ),
+      ),
+      childWhenDragging: Container(),
     );
   }
 }
@@ -127,8 +199,10 @@ class LocalExplorerState extends State<LocalExplorer> {
 
   Widget _buildSuggestions(layoutContext, constraint) {
     return ListView.builder(
+      itemCount: 15,
       padding: const EdgeInsets.all(16.0),
       itemBuilder: /*1*/ (context, i) {
+        
         if (i.isOdd) return Divider(); /*2*/
 
         final index = i ~/ 2; /*3*/
