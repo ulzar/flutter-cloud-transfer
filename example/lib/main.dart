@@ -12,11 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import 'dart:io';
+
 import 'package:flutter/foundation.dart'
     show debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:english_words/english_words.dart';
+import 'package:path/path.dart' as path;
 
 void main() {
   // See https://github.com/flutter/flutter/wiki/Desktop-shells#target-platform-override
@@ -24,6 +27,7 @@ void main() {
 
   runApp(new MyApp());
 }
+
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -37,7 +41,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-
 class MyHomePage extends StatefulWidget {
   MyHomePage({Key key, this.title}) : super(key: key);
   final String title;
@@ -47,26 +50,17 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-
   @override
   Widget build(BuildContext context) {
-    return Row(
-        children: <Widget>[
-          Expanded(
-              child: LocalExplorer(),
-          ),
-          Container(
-              width: 40,
-              color: Colors.grey
-          ),
-          Expanded(
-              child: RemoteExplorer()
-          ),
-        ]
-    );
+    return Row(children: <Widget>[
+      Expanded(
+        child: LocalExplorer(),
+      ),
+      Container(width: 40, color: Colors.grey),
+      Expanded(child: RemoteExplorer()),
+    ]);
   }
 }
-
 
 // **************************************************************************************************
 // **************************************************************************************************
@@ -77,9 +71,17 @@ class RemoteExplorer extends StatefulWidget {
 }
 
 class RemoteExplorerState extends State<RemoteExplorer> {
-  final List<WordPair> _suggestions = <WordPair>[];
+  final List<FileSystemEntity> _suggestions = <FileSystemEntity>[];
   // final Set<WordPair> _saved = Set<WordPair>();   // Add this line.
   final TextStyle _biggerFont = TextStyle(fontSize: 18.0);
+  Directory _parentDirectory = Directory('/workspace/dump');
+
+  @override
+  Widget initState() {
+    super.initState();
+    dirContents(Directory('/workspace/dump/sync/Backup'));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -89,50 +91,106 @@ class RemoteExplorerState extends State<RemoteExplorer> {
         //   IconButton(icon: Icon(Icons.list), onPressed: _pushSaved),
         // ],
       ),
-      body: new LayoutBuilder(builder: (layoutContext, constraint) {
-        return ListView.builder(
-          padding: const EdgeInsets.all(16.0),
-          itemBuilder: /*1*/ (context, i) {
-            
-            if (i.isOdd) return Divider(); /*2*/
-
-            final index = i ~/ 2; /*3*/
-            if (index >= _suggestions.length) {
-              _suggestions.addAll(generateWordPairs().take(10)); /*4*/
-            }
-            return _buildRow(_suggestions[index], i, layoutContext, constraint);
-          }
-        );
-      }),
+      body: Container(
+            child: Column(children: <Widget>[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: <Widget>[
+                  Expanded(
+                    flex: 1,
+                    child: IconButton(
+                      icon: const Icon(Icons.arrow_upward),
+                      onPressed: () {
+                        dirContents(_parentDirectory.parent);
+                      },
+                    )
+                  ),
+                  Expanded(
+                    flex: 5,
+                    child: Text(
+                      _parentDirectory.path,
+                      textAlign: TextAlign.left,
+                    ),
+                  )
+                ]
+              ),
+          Expanded(
+            child: new LayoutBuilder(builder: (layoutContext, constraint) {
+              return ListView.separated(
+                  separatorBuilder: (context, i) {
+                    return Divider();
+                  },
+                  itemCount: _suggestions.length,
+                  padding: const EdgeInsets.all(16.0),
+                  itemBuilder: /*1*/ (context, i) {
+                    return _buildRow(_suggestions[i], i, layoutContext, constraint);
+                  }
+              );
+            }),
+          )
+        ])
+      )
+      // body: new LayoutBuilder(builder: (layoutContext, constraint) {
+      //   return ListView.separated(
+      //       separatorBuilder: (context, i) {
+      //         return Divider();
+      //       },
+      //       itemCount: _suggestions.length,
+      //       padding: const EdgeInsets.all(16.0),
+      //       itemBuilder: /*1*/ (context, i) {
+      //         return _buildRow(_suggestions[i], i, layoutContext, constraint);
+      //       }
+      //   );
+      // }),
     );
   }
 
-  Widget _buildRow(WordPair pair, int index, layoutContext, constraint) {
+  Future<List<FileSystemEntity>> dirContents(Directory dir) {
+    var lister = dir.list(recursive: false);
+    _suggestions.clear();
+    _parentDirectory = dir;
+    lister.listen(
+      (file) => {
+            file.stat().then((fileStat) {
+              if (fileStat.type == FileSystemEntityType.directory) {
+                _suggestions.add(file);
+                print(
+                    'Added file ${file.path} to _suggestions (${_suggestions.length})');
+              }
+            })
+          },
+      // should also register onError
+      onDone: () => {
+            setState(() {
+              print("list on done" + _suggestions.toString());
+            })
+          });
+  }
+
+  Widget _buildRow(
+      FileSystemEntity fileEntity, int index, layoutContext, constraint) {
     // final bool alreadySaved = _saved.contains(pair);
     var listTileWord = ListTile(
-        title: Text(
-          pair.asPascalCase,
-          style: _biggerFont,
-        ),
-        // trailing: Icon(   // Add the lines from here... 
-        //   alreadySaved ? Icons.favorite : Icons.favorite_border,
-        //   color: alreadySaved ? Colors.red : null,
-        // ),
-        // onTap: () {
-        //   setState(() {
-        //     if(alreadySaved) {
-        //       _saved.remove(pair);
-        //     } else {
-        //       _saved.add(pair);
-        //     }
-        //   });
-        // },
-      );
+      title: Text(
+        fileEntity.path,
+        style: _biggerFont,
+      ),
+      // trailing: Icon(   // Add the lines from here...
+      //   alreadySaved ? Icons.favorite : Icons.favorite_border,
+      //   color: alreadySaved ? Colors.red : null,
+      // ),
+      onTap: () {
+        setState(() {
+          dirContents(fileEntity);
+        });
+      },
+    );
     return LongPressDraggable(
       key: new ObjectKey(index),
-      data: pair.asPascalCase,
-      child: new DragTarget<String>(
-        builder: (BuildContext context, List<String> data, List<dynamic> rejects) {
+      data: fileEntity.path,
+      child: new DragTarget<FileSystemEntity>(
+        builder: (BuildContext context, List<FileSystemEntity> data,
+            List<dynamic> rejects) {
           return new Card(
             child: new Column(
               children: <Widget>[
@@ -145,23 +203,22 @@ class RemoteExplorerState extends State<RemoteExplorer> {
           return true;
         },
         onAccept: (data) {
-          Scaffold.of(layoutContext).showSnackBar(new SnackBar (
-            content: new Text(pair.asPascalCase + " Received folder " + data),
+          Scaffold.of(layoutContext).showSnackBar(new SnackBar(
+            content:
+                new Text(fileEntity.path + " Received folder " + data.path),
           ));
         },
       ),
       onDragStarted: () {
-        Scaffold.of(layoutContext).showSnackBar(new SnackBar (
+        Scaffold.of(layoutContext).showSnackBar(new SnackBar(
           content: new Text("Drag the row onto another row to change places"),
         ));
       },
-      feedback:  new SizedBox(
+      feedback: new SizedBox(
         width: constraint.maxWidth,
-        child: new Card (
+        child: new Card(
           child: new Column(
-            children: <Widget>[
-              listTileWord
-            ],
+            children: <Widget>[listTileWord],
           ),
         ),
       ),
@@ -179,87 +236,133 @@ class LocalExplorer extends StatefulWidget {
 }
 
 class LocalExplorerState extends State<LocalExplorer> {
-  final List<WordPair> _suggestions = <WordPair>[];
-  final Set<WordPair> _saved = Set<WordPair>();   // Add this line.
+  final List<FileSystemEntity> _suggestions = <FileSystemEntity>[];
+  // final Set<WordPair> _saved = Set<WordPair>();   // Add this line.
   final TextStyle _biggerFont = TextStyle(fontSize: 18.0);
+  Directory _parentDirectory = Directory('/workspace/dump');
+
+  @override
+  Widget initState() {
+    super.initState();
+    dirContents(_parentDirectory);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Local Folder Explorer'),
-        // actions: <Widget>[
-        //   IconButton(icon: Icon(Icons.list), onPressed: _pushSaved),
-        // ],
-      ),
-      body: new LayoutBuilder(builder: (layoutContext, constraint) {
-        return _buildSuggestions(layoutContext, constraint);
-      }),
+        appBar: AppBar(
+          title: Text('Local Folder Explorer'),
+        ),
+        body: Container(
+            child: Column(children: <Widget>[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: <Widget>[
+                  Expanded(
+                    flex: 1,
+                    child: IconButton(
+                      icon: const Icon(Icons.arrow_upward),
+                      onPressed: () {
+                        dirContents(_parentDirectory.parent);
+                      },
+                    )
+                  ),
+                  Expanded(
+                    flex: 5,
+                    child: Text(
+                      _parentDirectory.path,
+                      textAlign: TextAlign.left,
+                    ),
+                  )
+                ]
+              ),
+          Expanded(
+            child: new LayoutBuilder(builder: (layoutContext, constraint) {
+              return _buildSuggestions(layoutContext, constraint);
+            }),
+          )
+        ]))
     );
   }
 
   Widget _buildSuggestions(layoutContext, constraint) {
-    return ListView.builder(
-      itemCount: 15,
-      padding: const EdgeInsets.all(16.0),
-      itemBuilder: /*1*/ (context, i) {
-        
-        if (i.isOdd) return Divider(); /*2*/
-
-        final index = i ~/ 2; /*3*/
-        if (index >= _suggestions.length) {
-          _suggestions.addAll(generateWordPairs().take(10)); /*4*/
+    return ListView.separated(
+        separatorBuilder: (context, i) {
+          return Divider();
+        },
+        itemCount: _suggestions.length,
+        padding: const EdgeInsets.all(16.0),
+        itemBuilder: /*1*/ (context, i) {
+          return _buildRow(_suggestions[i], i, layoutContext, constraint);
         }
-        return _buildRow(_suggestions[index], i, layoutContext, constraint);
-    });
+    );
   }
 
-  Widget _buildRow(WordPair pair, int index, layoutContext, constraint) {
-    final bool alreadySaved = _saved.contains(pair);
+  Future<List<FileSystemEntity>> dirContents(Directory dir) {
+    var lister = dir.list(recursive: false);
+    _suggestions.clear();
+    _parentDirectory = dir;
+
+    lister.listen(
+        (file) => {
+              file.stat().then((fileStat) {
+                if (fileStat.type == FileSystemEntityType.directory) {
+                  _suggestions.add(file);
+                  print(
+                      'Added file ${file.path} to _suggestions (${_suggestions.length})');
+                }
+              })
+            },
+        // should also register onError
+        onDone: () => {
+              setState(() {
+                print("list on done" + _suggestions.toString());
+              })
+            });
+    // return completer.future;
+  }
+
+  Widget _buildRow(
+      FileSystemEntity fileEntity, int index, layoutContext, constraint) {
+    // final bool alreadySaved = _saved.contains(pair);
     var listTileWord = ListTile(
-        title: Text(
-          pair.asPascalCase,
-          style: _biggerFont,
-        ),
-        trailing: Icon(   // Add the lines from here... 
-          alreadySaved ? Icons.favorite : Icons.favorite_border,
-          color: alreadySaved ? Colors.red : null,
-        ),
-        onTap: () {
-          setState(() {
-            if(alreadySaved) {
-              _saved.remove(pair);
-            } else {
-              _saved.add(pair);
-            }
-          });
-        },
-      );
+      title: Text(
+        path.basename(fileEntity.path),
+        style: _biggerFont,
+      ),
+      // trailing: Icon(   // Add the lines from here...
+      //   alreadySaved ? Icons.favorite : Icons.favorite_border,
+      //   color: alreadySaved ? Colors.red : null,
+      // ),
+      onTap: () {
+        setState(() {
+          dirContents(fileEntity);
+        });
+      },
+    );
     return LongPressDraggable(
       key: new ObjectKey(index),
-      data: pair.asPascalCase,
-      child: new DragTarget<String>(
-        builder: (BuildContext context, List<String> data, List<dynamic> rejects) {
-          return new Card(
-            child: new Column(
-              children: <Widget>[
-                listTileWord,
-              ],
-            ),
-          );
-        }
-      ),
+      data: fileEntity,
+      child: new DragTarget<String>(builder:
+          (BuildContext context, List<String> data, List<dynamic> rejects) {
+        return new Card(
+          child: new Column(
+            children: <Widget>[
+              listTileWord,
+            ],
+          ),
+        );
+      }),
       onDragStarted: () {
-        Scaffold.of(layoutContext).showSnackBar(new SnackBar (
+        Scaffold.of(layoutContext).showSnackBar(new SnackBar(
           content: new Text("Drag the row onto another row to change places"),
         ));
       },
-      feedback:  new SizedBox(
+      feedback: new SizedBox(
         width: constraint.maxWidth,
-        child: new Card (
+        child: new Card(
           child: new Column(
-            children: <Widget>[
-              listTileWord
-            ],
+            children: <Widget>[listTileWord],
           ),
         ),
       ),
@@ -338,7 +441,7 @@ class LocalExplorerState extends State<LocalExplorer> {
 //         pair.asPascalCase,
 //         style: _biggerFont,
 //       ),
-//       trailing: Icon(   // Add the lines from here... 
+//       trailing: Icon(   // Add the lines from here...
 //         alreadySaved ? Icons.favorite : Icons.favorite_border,
 //         color: alreadySaved ? Colors.red : null,
 //       ),
