@@ -19,13 +19,45 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:english_words/english_words.dart';
+import 'package:grpc/grpc.dart';
 import 'package:path/path.dart' as path;
+
+import 'src/generated/sirius/services/service.pbgrpc.dart';
+import 'src/generated/sirius/types/file.pbenum.dart';
+
+
+const atheraJWT = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImtpZCI6Ik9UUkdPVGczTXpCRFJEWXpSVE00TVVNd09USkJNRGMwT1RGRE5VWXdSRVl4TWtORk56YzJOUSJ9.eyJodHRwczovL21ldGFkYXRhLmVsYXJhLmlvL2luZm8iOnsiYXV0aElkIjoiYXV0aDB8NWFlMDczNGU3MzY0ZWQzYzI5ZWExYmY0IiwiZWxhcmFVc2VySWQiOiI2ZjIwNmRkYy0yMzdjLTRjNTUtYjMyNC0yZDI2NmVjOTgwNDkiLCJhdXRoMF9pZCI6ImF1dGgwfDVhZTA3MzRlNzM2NGVkM2MyOWVhMWJmNCIsImVsYXJhX3VzZXJfaWQiOiI2ZjIwNmRkYy0yMzdjLTRjNTUtYjMyNC0yZDI2NmVjOTgwNDkifSwiaXNzIjoiaHR0cHM6Ly9pZC5hdGhlcmEuaW8vIiwic3ViIjoiYXV0aDB8NWFlMDczNGU3MzY0ZWQzYzI5ZWExYmY0IiwiYXVkIjoiaHR0cHM6Ly9wdWJsaWMuYXRoZXJhLmlvIiwiaWF0IjoxNTcxNjQ0MDQzLCJleHAiOjE1NzE3MzA0NDMsImF6cCI6Ik41Qng0eDZUb0tDQk01Q0hBVjlPNWVOYjdpR01uczhUIiwic2NvcGUiOiJvZmZsaW5lX2FjY2VzcyJ9.XeU6rtXhMbsq1PUeqzH0JWxOWuwLmF1H--2IhnCV6XRbVo667cnRflMvzWIWcjoNQzGfAFtbaL1T5cmgb0L_lK5uJcVXCDE3U3WzPqNSgbfAehqL5FgM2flri4Kno_YrMiIRu6yUjWQFgX72szwniH05JRr64-mpa5sHKsu6esIBwPBmSuDbaKLZ6wl0FubcXbCebjW9br9Xv9RONtrV8X24dPdsSjkZDMEMYxyU7CdOLYR8btU8gqxI9qG10D9xEURF985qFYaElBP_9Y4CkfjkHfoX3Ig3y-tqSaiXGdCH1CycDViTekjQDuH5h9p_dF7eeHhAfqUGvi50l_7ajg';
+
+
+Map<String, String> metadata = {
+      'authorization': 'bearer: $atheraJWT',
+      'active-group': 'ee2219fb-d877-4475-8c03-408feabdabb3'
+    };
+
+// [('authorization', "bearer: {}".format(self.token)),
+//                     ('active-group', group_id)]
 
 void main() {
   // See https://github.com/flutter/flutter/wiki/Desktop-shells#target-platform-override
   debugDefaultTargetPlatformOverride = TargetPlatform.fuchsia;
 
   runApp(new MyApp());
+}
+
+
+class CustomFile {
+  bool _isFolder;
+  String _parentFolderPath;
+  String _filePath;
+  String _name;
+  CustomFile(
+    bool isFolder, String filePath, String parentFolderPath
+  ) {
+    _isFolder = isFolder;
+    _filePath = filePath;
+    _name = path.basename(filePath);
+    _parentFolderPath = parentFolderPath;
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -71,15 +103,25 @@ class RemoteExplorer extends StatefulWidget {
 }
 
 class RemoteExplorerState extends State<RemoteExplorer> {
-  final List<FileSystemEntity> _suggestions = <FileSystemEntity>[];
+  List<CustomFile> _suggestions = <CustomFile>[];
   // final Set<WordPair> _saved = Set<WordPair>();   // Add this line.
   final TextStyle _biggerFont = TextStyle(fontSize: 18.0);
-  Directory _parentDirectory = Directory('/workspace/dump');
+  SiriusClient siriusClient;
+
+  // Directory _parentDirectory = Directory('/workspace/dump');
+  String _currentDirectoryPath = '/';
 
   @override
   Widget initState() {
     super.initState();
-    dirContents(Directory('/workspace/dump/sync/Backup'));
+    final channel = ClientChannel('europe-west1.files.athera.io',
+        port: 443,
+        // options:
+        //     const ChannelOptions(credentials: ChannelCredentials.insecure())
+    );
+    siriusClient = SiriusClient(channel);  
+    
+    listFiles('/');
   }
 
   @override
@@ -101,14 +143,14 @@ class RemoteExplorerState extends State<RemoteExplorer> {
                     child: IconButton(
                       icon: const Icon(Icons.arrow_upward),
                       onPressed: () {
-                        dirContents(_parentDirectory.parent);
+                        listFiles(path.dirname(_currentDirectoryPath));
                       },
                     )
                   ),
                   Expanded(
                     flex: 5,
                     child: Text(
-                      _parentDirectory.path,
+                      _currentDirectoryPath,
                       textAlign: TextAlign.left,
                     ),
                   )
@@ -145,34 +187,37 @@ class RemoteExplorerState extends State<RemoteExplorer> {
     );
   }
 
-  Future<List<FileSystemEntity>> dirContents(Directory dir) {
-    var lister = dir.list(recursive: false);
-    _suggestions.clear();
-    _parentDirectory = dir;
-    lister.listen(
-      (file) => {
-            file.stat().then((fileStat) {
-              if (fileStat.type == FileSystemEntityType.directory) {
-                _suggestions.add(file);
-                print(
-                    'Added file ${file.path} to _suggestions (${_suggestions.length})');
-              }
-            })
-          },
-      // should also register onError
-      onDone: () => {
-            setState(() {
-              print("list on done" + _suggestions.toString());
-            })
-          });
+  Future<List<FileSystemEntity>> listFiles(String remotePath) async {
+    _currentDirectoryPath = remotePath;
+    print('List path : $remotePath');
+    final List<CustomFile> tmp_suggestions = <CustomFile>[];
+    final request = FilesListRequest();
+    request..path = remotePath;
+    request..mountId = '44e39b2f-ecb7-44d5-b9ea-c6ff98e84b8d';
+    
+    await for (var fileListResponse in siriusClient.filesList(request, options: CallOptions(metadata: metadata))) {
+      final file = fileListResponse.file;
+      if (file.type == File_Type.DIRECTORY) {
+        tmp_suggestions.add(new CustomFile(
+          true, file.path, remotePath
+        ));
+      }
+    }
+
+    setState(() {
+      _suggestions = tmp_suggestions;
+      print("File List: list on done" + _suggestions.toString());
+    });
   }
 
+
+
   Widget _buildRow(
-      FileSystemEntity fileEntity, int index, layoutContext, constraint) {
+      CustomFile customFile, int index, layoutContext, constraint) {
     // final bool alreadySaved = _saved.contains(pair);
     var listTileWord = ListTile(
       title: Text(
-        fileEntity.path,
+        customFile._name,
         style: _biggerFont,
       ),
       // trailing: Icon(   // Add the lines from here...
@@ -181,13 +226,13 @@ class RemoteExplorerState extends State<RemoteExplorer> {
       // ),
       onTap: () {
         setState(() {
-          dirContents(fileEntity);
+          listFiles(customFile._filePath);
         });
       },
     );
     return LongPressDraggable(
       key: new ObjectKey(index),
-      data: fileEntity.path,
+      data: customFile._filePath,
       child: new DragTarget<FileSystemEntity>(
         builder: (BuildContext context, List<FileSystemEntity> data,
             List<dynamic> rejects) {
@@ -205,7 +250,7 @@ class RemoteExplorerState extends State<RemoteExplorer> {
         onAccept: (data) {
           Scaffold.of(layoutContext).showSnackBar(new SnackBar(
             content:
-                new Text(fileEntity.path + " Received folder " + data.path),
+                new Text(customFile._filePath + " Received folder " + data.path),
           ));
         },
       ),
