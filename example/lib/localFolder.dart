@@ -14,6 +14,9 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'package:example_flutter/transfers.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:event_bus/event_bus.dart';
 import 'package:flutter/material.dart';
@@ -29,25 +32,17 @@ import 'src/generated/sirius/types/file.pbenum.dart' as siriusTypes;
 // **************************************************************************************************
 class LocalExplorer extends StatefulWidget {
 
-  EventBus eventBus;
-  LocalExplorer(EventBus eventBus) {
-    eventBus = eventBus;
-  }
   @override
-  LocalExplorerState createState() => LocalExplorerState(eventBus);
+  LocalExplorerState createState() => LocalExplorerState();
 }
 
 class LocalExplorerState extends State<LocalExplorer> {
   final List<FileSystemEntity> _suggestions = <FileSystemEntity>[];
   // final Set<WordPair> _saved = Set<WordPair>();   // Add this line.
   final TextStyle _biggerFont = TextStyle(fontSize: 18.0);
-  EventBus _eventBus;
   Directory _parentDirectory = Directory('/workspace/dump');
   siriusSvc.SiriusClient _siriusClient;
 
-  LocalExplorerState(EventBus eventBus) {
-    _eventBus = eventBus;
-  }
 
   @override
   Widget initState() {
@@ -64,12 +59,14 @@ class LocalExplorerState extends State<LocalExplorer> {
 
   @override
   Widget build(BuildContext context) {
+    
     return Scaffold(
         appBar: AppBar(
           title: Text('Local Folder Explorer'),
         ),
         body: Container(
-            child: Column(children: <Widget>[
+          child: Column(
+            children: <Widget>[
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: <Widget>[
@@ -91,12 +88,14 @@ class LocalExplorerState extends State<LocalExplorer> {
                   )
                 ]
               ),
-          Expanded(
-            child: new LayoutBuilder(builder: (layoutContext, constraint) {
-              return _buildSuggestions(layoutContext, constraint);
-            }),
+              Expanded(
+                child: new LayoutBuilder(builder: (layoutContext, constraint) {
+                  return _buildSuggestions(layoutContext, constraint);
+                }),
+              )
+            ]
           )
-        ]))
+        )
     );
   }
 
@@ -136,34 +135,36 @@ class LocalExplorerState extends State<LocalExplorer> {
             });
   }
 
-  downloadFiles(String localFolderPath, String remoteFolderPath) async {
+  downloadFiles(String localFolderPath, String remoteFolderPath, TransferService transferSvc) async {
     print('Downloading files from $remoteFolderPath to $localFolderPath');
     // bool foundFile = false;
-    var futures = <Future>[];
-    var now = new DateTime.now();
-    var transferID = Uuid().v4().toString();
-    _eventBus.fire(new InitTransferEvent(transferID, remoteFolderPath, localFolderPath, false));
+    // var futures = <Future>[];
+    // var now = new DateTime.now();
+    // globalEventBus.fire(InitTransferEvent(remoteFolderPath, localFolderPath, false));
     await for (var fileListResponse in listRemoteFiles(_siriusClient, remoteFolderPath)) {
-      final file = fileListResponse.file;
-      if (file.type != siriusTypes.File_Type.DIRECTORY) {
-        _eventBus.fire(new FileDownloadEvent(transferID, file.size.toInt()));
-        final localFile = openLocalFile(localFolderPath, file.name);
-        var publishProgress = (int bytesTransferred) {
-          _eventBus.fire(new FileDownloadProgressEvent(transferID, bytesTransferred));
-        };
-        futures.add(downloadFile(_siriusClient, localFile, file.path, publishProgress));
+      final remoteFile = fileListResponse.file;
+      
+      if (remoteFile.type != siriusTypes.File_Type.DIRECTORY) {
+        transferSvc.newFileDownload(_siriusClient,remoteFile, localFolderPath);
+        // globalEventBus.fire(FileDownloadEvent(transferID, file.size.toInt()));
+        // final localFile = openLocalFile(localFolderPath, file.name);
+        // var publishProgress = (int bytesTransferred) {
+        //   globalEventBus.fire(FileDownloadProgressEvent(transferID, bytesTransferred));
+        // };
+        // futures.add(downloadFile(_siriusClient, localFile, file.path, publishProgress));
         
       }
     }
-    await Future.wait(futures);
-    var duration = DateTime.now().difference(now).inSeconds;
-    print('Download took $duration secs');
+    // await Future.wait(futures);
+    // var duration = DateTime.now().difference(now).inSeconds;
+    // print('Download took $duration secs');
 
   }
 
   Widget _buildRow(
       FileSystemEntity localFolder, int index, layoutContext, constraint) {
     // final bool alreadySaved = _saved.contains(pair);
+    final transferSvc = Provider.of<TransferService>(context);
     var listTileWord = ListTile(
       title: Text(
         path.basename(localFolder.path),
@@ -193,7 +194,6 @@ class LocalExplorerState extends State<LocalExplorer> {
           );
         },
         onWillAccept: (remoteFolder) {
-          print('onWillAccept');
           return true;
         },
         onAccept: (remoteFolder) {
@@ -206,7 +206,7 @@ class LocalExplorerState extends State<LocalExplorer> {
           print('File to create $myFile');
           new Directory(path.join(localFolder.path, remoteFolder.name)).create()
           .then((Directory directory) {
-            downloadFiles(directory.path, remoteFolder.filePath);
+            downloadFiles(directory.path, remoteFolder.filePath, transferSvc);
           });
           
         },

@@ -14,12 +14,14 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'package:event_bus/event_bus.dart';
 import 'package:grpc/grpc.dart';
 import 'package:path/path.dart' as path;
 import 'src/generated/sirius/services/service.pbgrpc.dart' as siriusSvc;
 
+EventBus globalEventBus = new EventBus();
 
-const atheraJWT = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImtpZCI6Ik9UUkdPVGczTXpCRFJEWXpSVE00TVVNd09USkJNRGMwT1RGRE5VWXdSRVl4TWtORk56YzJOUSJ9.eyJodHRwczovL21ldGFkYXRhLmVsYXJhLmlvL2luZm8iOnsiYXV0aElkIjoiYXV0aDB8NWFlMDczNGU3MzY0ZWQzYzI5ZWExYmY0IiwiZWxhcmFVc2VySWQiOiI2ZjIwNmRkYy0yMzdjLTRjNTUtYjMyNC0yZDI2NmVjOTgwNDkiLCJhdXRoMF9pZCI6ImF1dGgwfDVhZTA3MzRlNzM2NGVkM2MyOWVhMWJmNCIsImVsYXJhX3VzZXJfaWQiOiI2ZjIwNmRkYy0yMzdjLTRjNTUtYjMyNC0yZDI2NmVjOTgwNDkifSwiaXNzIjoiaHR0cHM6Ly9pZC5hdGhlcmEuaW8vIiwic3ViIjoiYXV0aDB8NWFlMDczNGU3MzY0ZWQzYzI5ZWExYmY0IiwiYXVkIjoiaHR0cHM6Ly9wdWJsaWMuYXRoZXJhLmlvIiwiaWF0IjoxNTcxNjQ0MDQzLCJleHAiOjE1NzE3MzA0NDMsImF6cCI6Ik41Qng0eDZUb0tDQk01Q0hBVjlPNWVOYjdpR01uczhUIiwic2NvcGUiOiJvZmZsaW5lX2FjY2VzcyJ9.XeU6rtXhMbsq1PUeqzH0JWxOWuwLmF1H--2IhnCV6XRbVo667cnRflMvzWIWcjoNQzGfAFtbaL1T5cmgb0L_lK5uJcVXCDE3U3WzPqNSgbfAehqL5FgM2flri4Kno_YrMiIRu6yUjWQFgX72szwniH05JRr64-mpa5sHKsu6esIBwPBmSuDbaKLZ6wl0FubcXbCebjW9br9Xv9RONtrV8X24dPdsSjkZDMEMYxyU7CdOLYR8btU8gqxI9qG10D9xEURF985qFYaElBP_9Y4CkfjkHfoX3Ig3y-tqSaiXGdCH1CycDViTekjQDuH5h9p_dF7eeHhAfqUGvi50l_7ajg';
+const atheraJWT = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImtpZCI6Ik9UUkdPVGczTXpCRFJEWXpSVE00TVVNd09USkJNRGMwT1RGRE5VWXdSRVl4TWtORk56YzJOUSJ9.eyJodHRwczovL21ldGFkYXRhLmVsYXJhLmlvL2luZm8iOnsiYXV0aElkIjoiYXV0aDB8NWFlMDczNGU3MzY0ZWQzYzI5ZWExYmY0IiwiZWxhcmFVc2VySWQiOiI2ZjIwNmRkYy0yMzdjLTRjNTUtYjMyNC0yZDI2NmVjOTgwNDkiLCJhdXRoMF9pZCI6ImF1dGgwfDVhZTA3MzRlNzM2NGVkM2MyOWVhMWJmNCIsImVsYXJhX3VzZXJfaWQiOiI2ZjIwNmRkYy0yMzdjLTRjNTUtYjMyNC0yZDI2NmVjOTgwNDkifSwiaXNzIjoiaHR0cHM6Ly9pZC5hdGhlcmEuaW8vIiwic3ViIjoiYXV0aDB8NWFlMDczNGU3MzY0ZWQzYzI5ZWExYmY0IiwiYXVkIjoiaHR0cHM6Ly9wdWJsaWMuYXRoZXJhLmlvIiwiaWF0IjoxNTcxOTA4MDc0LCJleHAiOjE1NzE5OTQ0NzQsImF6cCI6Ik41Qng0eDZUb0tDQk01Q0hBVjlPNWVOYjdpR01uczhUIiwic2NvcGUiOiJvZmZsaW5lX2FjY2VzcyJ9.Lcud5sSldMYcgMo0S51yVbGanvZQWYui9IkrHCu--JhQ4etM9TqsEWr4UQgHB3d84wdSYM9tqNq4lHqD4R_LArNIyz0BO-lkfBOao4pujuAzgZcNH_EHHNaRYw2L-FV_iXLctSSxhj_TAhWHJGmWyO0G6ugLTYWxiO4RPFNAuhHc-YH2CuPptJmGy9u2Fr_iBwc0WMZmMKnJ8F3-9WkPWegrnfe_X7Pv5BGnJfkAblIfEn_hJT44Nfz92C0PH3ieIZPEaqi46cpzvnh_cQtaArT_4JtvUwcnDFFa03R1qRYoNWNRDFLhxVUKyUpgvibetdm_IxdAFI3VEwfYtBNrtw';
 
 
 Map<String, String> metadata = {
@@ -38,7 +40,7 @@ ResponseStream<siriusSvc.FilesListResponse> listRemoteFiles(siriusSvc.SiriusClie
     return siriusClient.filesList(request, options: CallOptions(metadata: metadata));
 }
 
-downloadFile(siriusSvc.SiriusClient siriusClient, File localFile, String remoteFilePath, publishProgress (int byteTransferred)) async {
+Future<void> downloadFile(siriusSvc.SiriusClient siriusClient, File localFile, String remoteFilePath, publishProgress (int byteTransferred)) async {
     final request = siriusSvc.FileDownloadRequest();
     request..path = remoteFilePath;
     request..mountId = '44e39b2f-ecb7-44d5-b9ea-c6ff98e84b8d';
@@ -67,22 +69,21 @@ class CustomFile {
   String filePath;
   String name;
   CustomFile(
-    bool isFolder, String filePath, String parentFolderPath
+    bool paramIsFolder, String paramFilePath, String paramParentFolderPath
   ) {
-    isFolder = isFolder;
-    filePath = filePath;
-    name = path.basename(filePath);
-    parentFolderPath = parentFolderPath;
+    isFolder = paramIsFolder;
+    filePath = paramFilePath;
+    name = path.basename(paramFilePath);
+    parentFolderPath = paramParentFolderPath;
   }
 }
 
 class InitTransferEvent {
-  String transferID;
   String remoteFolderPath;
   String localFolderPath;
   bool isUpload = false;
 
-  InitTransferEvent(this.transferID, this.remoteFolderPath, this.localFolderPath, this.isUpload);
+  InitTransferEvent(this.remoteFolderPath, this.localFolderPath, this.isUpload);
 }
 
 class FileDownloadEvent {

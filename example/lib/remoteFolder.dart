@@ -101,22 +101,11 @@ class RemoteExplorerState extends State<RemoteExplorer> {
           )
         ])
       )
-      // body: new LayoutBuilder(builder: (layoutContext, constraint) {
-      //   return ListView.separated(
-      //       separatorBuilder: (context, i) {
-      //         return Divider();
-      //       },
-      //       itemCount: _suggestions.length,
-      //       padding: const EdgeInsets.all(16.0),
-      //       itemBuilder: /*1*/ (context, i) {
-      //         return _buildRow(_suggestions[i], i, layoutContext, constraint);
-      //       }
-      //   );
-      // }),
     );
   }
 
   Future<List<FileSystemEntity>> listFiles(String remotePath) async {
+    print('remotePath=$remotePath');
     _currentDirectoryPath = remotePath;
     // print('List path : $remotePath');
     final List<CustomFile> tmp_suggestions = <CustomFile>[];
@@ -124,39 +113,19 @@ class RemoteExplorerState extends State<RemoteExplorer> {
     await for (var fileListResponse in listRemoteFiles(siriusClient, remotePath)) {
       final file = fileListResponse.file;
       if (file.type == siriusTypes.File_Type.DIRECTORY) {
-        tmp_suggestions.add(new CustomFile(
+        var newFile = new CustomFile(
           true, file.path, remotePath
-        ));
+        );
+        tmp_suggestions.add(newFile);
       }
     }
 
+    print('ListFiles $remotePath: $tmp_suggestions');
+
     setState(() {
       _suggestions = tmp_suggestions;
-      // print("File List: list on done" + _suggestions.toString());
     });
   }
-
-  // Future<List<FileSystemEntity>> fileDownload(String remotePath) async {
-  //   _currentDirectoryPath = remotePath;
-  //   print('FileDownload : $remotePath');
-  //   final List<CustomFile> tmp_suggestions = <CustomFile>[];
-    
-  //   await for (var fileListResponse in listRemoteFiles(siriusClient, remotePath)) {
-  //     final file = fileListResponse.file;
-  //     if (file.type == siriusTypes.File_Type.DIRECTORY) {
-  //       tmp_suggestions.add(new CustomFile(
-  //         true, file.path, remotePath
-  //       ));
-  //     }
-  //   }
-
-  //   setState(() {
-  //     _suggestions = tmp_suggestions;
-  //     print("File List: list on done" + _suggestions.toString());
-  //   });
-  // }
-
-
 
   Widget _buildRow(
       CustomFile remoteFolder, int index, layoutContext, constraint) {
