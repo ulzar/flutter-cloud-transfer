@@ -14,9 +14,11 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'package:example_flutter/transfers.dart';
 import 'package:flutter/material.dart';
 import 'package:grpc/grpc.dart';
 import 'package:path/path.dart' as path;
+import 'package:provider/provider.dart';
 import 'commons.dart';
 import 'src/generated/sirius/services/service.pbgrpc.dart' as siriusSvc;
 import 'src/generated/sirius/types/file.pbenum.dart' as siriusTypes;
@@ -35,7 +37,7 @@ class RemoteExplorerState extends State<RemoteExplorer> {
   List<CustomFile> _suggestions = <CustomFile>[];
   // final Set<WordPair> _saved = Set<WordPair>();   // Add this line.
   final TextStyle _biggerFont = TextStyle(fontSize: 18.0);
-  siriusSvc.SiriusClient siriusClient;
+  siriusSvc.SiriusClient _siriusClient;
 
   // Directory _parentDirectory = Directory('/workspace/dump');
   String _currentDirectoryPath = '/';
@@ -48,7 +50,7 @@ class RemoteExplorerState extends State<RemoteExplorer> {
         // options:
         //     const ChannelOptions(credentials: ChannelCredentials.insecure())
     );
-    siriusClient = siriusSvc.SiriusClient(channel);  
+    _siriusClient = siriusSvc.SiriusClient(channel);  
     
     listFiles('/');
   }
@@ -110,7 +112,7 @@ class RemoteExplorerState extends State<RemoteExplorer> {
     // print('List path : $remotePath');
     final List<CustomFile> tmp_suggestions = <CustomFile>[];
     
-    await for (var fileListResponse in listRemoteFiles(siriusClient, remotePath)) {
+    await for (var fileListResponse in listRemoteFiles(_siriusClient, remotePath)) {
       final file = fileListResponse.file;
       if (file.type == siriusTypes.File_Type.DIRECTORY) {
         var newFile = new CustomFile(
@@ -127,8 +129,26 @@ class RemoteExplorerState extends State<RemoteExplorer> {
     });
   }
 
+  uploadFiles(Directory localFolder, String remoteFolderPath, TransferService transferSvc) async {
+    var lister = localFolder.list(recursive: false);
+
+    lister.listen(
+        (file) => {
+              file.stat().then((fileStat) {
+                if (fileStat.type == FileSystemEntityType.file) {
+                  print("Adding file ${file.path} to upload queue");
+                  transferSvc.newFileUpload(_siriusClient, file, fileStat.size,remoteFolderPath);
+                }
+              })
+            },
+        // should also register onError
+        onDone: () => {}
+    );
+  }
+
   Widget _buildRow(
       CustomFile remoteFolder, int index, layoutContext, constraint) {
+    final transferSvc = Provider.of<TransferService>(context);
     var listTileWord = ListTile(
       title: Text(
         remoteFolder.name,
@@ -162,6 +182,10 @@ class RemoteExplorerState extends State<RemoteExplorer> {
             content:
                 new Text(remoteFolder.filePath + " Received folder " + data.path),
           ));
+          print('onAccept');
+          print('Uploading folder: ${data.path} on remote folder ${remoteFolder.filePath}');
+          final localDir = new Directory(data.path);
+          uploadFiles(localDir, remoteFolder.filePath, transferSvc);
         },
       ),
       onDragStarted: () {

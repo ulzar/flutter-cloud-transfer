@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import 'package:example_flutter/commons.dart';
 import 'package:flutter/foundation.dart'
     show debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
@@ -20,8 +19,6 @@ import 'package:provider/provider.dart';
 import 'localFolder.dart';
 import 'remoteFolder.dart';
 import 'transfers.dart';
-import 'package:bloc/bloc.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 
 void main() {
   // See https://github.com/flutter/flutter/wiki/Desktop-shells#target-platform-override

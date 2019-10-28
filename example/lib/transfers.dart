@@ -17,7 +17,6 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:event_bus/event_bus.dart';
 import 'package:example_flutter/src/generated/sirius/services/service.pbgrpc.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -26,7 +25,6 @@ import 'commons.dart';
 import 'package:path/path.dart' as path;
 
 import 'package:bloc/bloc.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'src/generated/sirius/types/file.pb.dart' as siriusTypes;
 
 
@@ -60,12 +58,6 @@ enum DisplayFilter { all, download, upload}
 // Remove logic from TransferScreen and put it in a Change Notifier
 
 class TransferScreenState extends State<TransferScreen> {
-  // String currentTransferID;
-  // String transferType;
-  // String currentRemoteFolderPath;
-  // String currentLocalFolderPath;
-  // int totalBytes = 0;
-  // int bytesTransferred = 0;
   final TextStyle _biggerFont = TextStyle(fontSize: 18.0);
   
   DisplayFilter _displayFilter = DisplayFilter.all;
@@ -75,7 +67,7 @@ class TransferScreenState extends State<TransferScreen> {
     final transferSvc = Provider.of<TransferService>(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text("Transfer. Download rate (${transferSvc.downloadRate}) / ${transferSvc.fileTransfers.length}"),
+        title: Text("Transfer -  Rate (${transferSvc.transferRate}) / Files in progress: ${transferSvc.fileTransfers.length}"),
       ),
       body: Container(
         padding: EdgeInsets.all(20),
@@ -92,75 +84,6 @@ class TransferScreenState extends State<TransferScreen> {
           ),
       ),
     );
-
-    // return Scaffold(
-    //   appBar: AppBar(
-    //     title: Text("Transfer. Download rate (${transferSvc.downloadRate}) / ${transferSvc.fileTransfers.length}"),
-    //   ),
-    //   body: Container(
-    //     child: Column(
-    //       children: <Widget>[
-    //         Row(
-    //           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    //           children: <Widget>[
-    //             Expanded(
-    //               flex: 1,
-    //               child: RadioListTile<DisplayFilter>(
-    //                 title: FlatButton(
-    //                   color: Colors.red,
-    //                   child: Icon(Icons.filter_list),
-    //                   onPressed: null,
-    //                 ),
-    //                 value: DisplayFilter.all,
-    //                 groupValue: _displayFilter,
-    //                 onChanged: (value) { setState(() { _displayFilter = value; }); }
-    //               ),
-    //             ),
-    //             Expanded(
-    //               flex: 1,
-    //               child: RadioListTile<DisplayFilter>(
-    //                 title: FlatButton.icon(
-    //                   padding: const EdgeInsets.all(16.0),
-    //                   color: Colors.red,
-    //                   onPressed: null,
-    //                   icon: Icon(Icons.filter_list),
-    //                   label:Text('Download'),
-    //                 ),
-    //                 value: DisplayFilter.download,
-    //                 groupValue: _displayFilter,
-    //                 onChanged: (value) { setState(() { _displayFilter = value; }); }
-    //               ),
-    //             ),
-    //             Expanded(
-    //               child: RadioListTile<DisplayFilter>(
-    //                 title: FlatButton.icon(
-    //                   onPressed: null,
-    //                   color: Colors.red,
-    //                   icon: Icon(Icons.filter_list),
-    //                   label:Text('Upload'),
-    //                 ),
-    //                 value: DisplayFilter.upload,
-    //                 groupValue: _displayFilter,
-    //                 onChanged: (value) { setState(() { _displayFilter = value; }); }
-    //               ),
-    //             ),                
-    //           ],
-    //         ),
-    //         Row(
-    //           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    //           children: <Widget>[     
-    //             Expanded(
-    //               flex: 1,
-    //               child: new LayoutBuilder(builder: (layoutContext, constraint) {
-    //                 return _buildFileList(layoutContext, constraint, transferSvc);
-    //               }),
-    //             )
-    //           ],
-    //         ),
-    //       ],
-    //     )
-    //   )
-    // );
   }
 
   Widget _buildFileList(layoutContext, constraint, TransferService transferSvc) {
@@ -205,9 +128,12 @@ class TransferScreenState extends State<TransferScreen> {
 
   Widget _buildRow(
       FileTransfer fileTransfer, int index, layoutContext, constraint) {
-    // final bool alreadySaved = _saved.contains(pair);
-
+    var iconData = Icons.cloud_download;
+    if (fileTransfer.isUpload) {
+      iconData = Icons.cloud_upload;
+    }
     return ListTile(
+      leading: Icon(iconData),
       title: Text(
         '${fileTransfer.displayName}',
         style: _biggerFont,
@@ -227,11 +153,15 @@ abstract class FileTransfer  {
   String id;
   int totalBytes;
   int _bytesTransferred;
+  
   FileTransfer() {
     this.id = Uuid().v4().toString();
     this._bytesTransferred = 0;
   }
 
+  bool get isUpload {
+    return false;
+  }
   String get localFilePath {}
   String get remoteFilePath {}
   String get displayName {}
@@ -239,6 +169,54 @@ abstract class FileTransfer  {
 }
 
 class UploadFileTransfer extends FileTransfer {
+  File localFile;
+  String remoteFolderPath;
+  TransferService transferSvc;
+  int localFileSize = 0;
+  String _localFileName;
+  UploadFileTransfer(this.transferSvc, this.localFile, this.localFileSize, this.remoteFolderPath) : super() {
+    _localFileName = path.basename(this.localFile.path);
+  }
+
+
+  @override
+  String get localFilePath {
+    return '${localFile.path}';
+  }
+
+  @override
+   bool get isUpload {
+    return true;
+  }
+
+  @override
+  double get currentPercentage {
+    if (totalBytes == 0) {
+      return 0;
+    }
+    return _bytesTransferred/localFileSize;
+  }
+
+  @override
+  String get remoteFilePath {
+    return '$remoteFolderPath/$_localFileName';
+  }
+
+  @override
+  String get displayName {
+    return 'Uploading $_localFileName';
+  }
+
+  Future<void> run(SiriusClient siriusClient,  notifier ()) {
+    final localFile = File(localFilePath);
+    Null Function(int bytesTransferred) publishProgress;
+    publishProgress = (int bytesTransferred) {
+      _bytesTransferred += bytesTransferred;
+      transferSvc.bytesTransferred += bytesTransferred;
+      notifier(); // Notify listener
+    };
+    return uploadFile(siriusClient, localFile, localFileSize, remoteFilePath, publishProgress);
+  }
 
 }
 class DownloadFileTransfer extends FileTransfer {
@@ -275,8 +253,7 @@ class DownloadFileTransfer extends FileTransfer {
     var publishProgress = (int bytesTransferred) {
       _bytesTransferred += bytesTransferred;
       transferSvc.bytesTransferred += bytesTransferred;
-      notifier();
-      // Notify listener
+      notifier(); // Notify listener
     };
     return downloadFile(siriusClient, localFile, remoteFile.path, publishProgress);
   }
@@ -286,7 +263,7 @@ class TransferService with ChangeNotifier{
   String currentTransferID;
   List<FileTransfer> fileTransfers = <FileTransfer>[];
   int bytesTransferred = 0;
-  int _downloadRate;
+  int _transferRate;
 
   static String formatBytes(int bytes, int decimals) {
     if (bytes <= 0) return "0 B";
@@ -297,8 +274,8 @@ class TransferService with ChangeNotifier{
         suffixes[i];
   }
 
-  String get downloadRate {
-    return formatBytes(_downloadRate, 2);
+  String get transferRate {
+    return formatBytes(_transferRate, 2) + '/s';
   }
 
   TransferService() : super() {
@@ -306,7 +283,7 @@ class TransferService with ChangeNotifier{
     new Timer.periodic(
       oneSec, 
       (Timer t) {
-        _downloadRate = (bytesTransferred/2).toInt();
+        _transferRate = (bytesTransferred/2).toInt();
         bytesTransferred = 0;
         notifyListeners();
       }
@@ -316,7 +293,7 @@ class TransferService with ChangeNotifier{
 
 
   String newFileDownload(SiriusClient siriusClient, siriusTypes.File remoteFile, String localFolderPath) {
-    var fileDownload = new DownloadFileTransfer(this, remoteFile, localFolderPath);
+    final fileDownload = new DownloadFileTransfer(this, remoteFile, localFolderPath);
     fileTransfers.add(fileDownload);
     fileDownload.run(siriusClient, notifyListeners).then(
       (onVal) {
@@ -335,41 +312,23 @@ class TransferService with ChangeNotifier{
     return fileDownload.id;
   }
 
-  
-
-  // TransferService(EventBus eventBus) {
-  //   print('TransferScreenState');
-    
-  //   // eventBus.on<FileDownloadEvent>().listen(
-  //   //   (event) {
-  //   //     // print('Received FileDownloadEvent: $event');
-  //   //     if (event.transferID != currentTransferID) {
-  //   //       print('Wrong transfer ID, event ignored');
-  //   //       return;
-  //   //     }
-  //   //     totalBytes += event.totalFileSize;
-  //   //     notifyListeners();
-  //   //   }
-  //   // );
-  //   // eventBus.on<FileDownloadProgressEvent>().listen(
-  //   //   (event) {
-  //   //     // print('Received FileDownloadProgressEvent: $event');
-  //   //     if (event.transferID != currentTransferID) {
-  //   //       print('Wrong transfer ID, event ignored');
-  //   //     }
-  //   //     bytesTransferred += event.bytesTransferred;
-  //   //     notifyListeners();
-  //   //   }
-  //   // );
-  // }
-
-  // getPercentage get 
-
-  // double get currentPercentage {
-  //   if (totalBytes == 0) {
-  //     return 0;
-  //   }
-  //   return bytesTransferred/totalBytes;
-  // }
-
+  String newFileUpload(SiriusClient siriusClient, File localFile, int localFileSize, String remoteFolderPath) {
+    final fileUpload = new UploadFileTransfer(this, localFile, localFileSize, remoteFolderPath);
+    fileTransfers.add(fileUpload);
+    fileUpload.run(siriusClient, notifyListeners).then(
+      (onVal) {
+        fileTransfers.removeWhere(
+          (onVal) {
+            if (onVal.id == fileUpload.id) {
+              notifyListeners();
+              return true;
+            }
+            return false;
+          }
+        );
+        
+      }
+    );
+    return fileUpload.id;
+  }
 }
